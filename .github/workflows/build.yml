@@ -47,8 +47,22 @@ jobs:
           docker context create server --docker "host=ssh://root@$SERVER_IP"
           docker context use server
 
+      - name: Sanitize repo slug
+        uses: actions/github-script@v6
+        id: repo_slug
+        with:
+          result-encoding: string
+          script: return 'ghcr.io/${{ github.repository_owner }}/${{ github.repository }}'.toLowerCase()
+
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.repo_slug.outputs.result }}:latest
+    
       - name: Pull Image
-        run: docker pull ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest.toLowerCase()
+        run: docker pull ${{ steps.repo_slug.outputs.result }}:latest
 
       - name: Start Services
         run: |
