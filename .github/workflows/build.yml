@@ -37,7 +37,7 @@ jobs:
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.8.0
         with:
-            ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Scan Host
         run: ssh-keyscan "$SERVER_IP" >> ~/.ssh/known_hosts
@@ -48,11 +48,8 @@ jobs:
           docker context use server
 
       - name: Sanitize repo slug
-        uses: actions/github-script@v6
         id: repo_slug
-        with:
-          result-encoding: string
-          script: return 'ghcr.io/${{ github.repository }}'.toLowerCase()
+        run: echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | tee /tmp/repo_slug.txt
 
       - name: Build and push
         uses: docker/build-push-action@v3
@@ -62,7 +59,7 @@ jobs:
           tags: ${{ steps.repo_slug.outputs.result }}:latest
     
       - name: Pull Image
-        run: docker pull ${{ steps.repo_slug.outputs.result }}:latest
+        run: docker pull $(cat /tmp/repo_slug.txt):latest
 
       - name: Start Services
         run: |
