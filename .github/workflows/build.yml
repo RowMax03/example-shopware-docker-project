@@ -1,6 +1,6 @@
 name: Build Docker Image
 on:
-    workflow_call:
+    workflow_dispatch:
         inputs:
             php-version:
               description: 'PHP Version'
@@ -18,9 +18,7 @@ on:
               description: 'Bun version to install'
               type: string
               default: 'latest'
-        secrets:
-            ghToken:
-              required: true
+
 jobs:
     run:
         runs-on: ubuntu-latest
