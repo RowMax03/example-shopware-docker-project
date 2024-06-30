@@ -1,81 +1,85 @@
 name: Build Docker Image
-
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-  packages: write
-
+    workflow_call:
+        inputs:
+            php-version:
+              description: 'PHP Version'
+              type: string
+              default: '8.2'
+            php-extensions:
+              description: 'PHP extensions to install'
+              type: string
+              default: ''
+            use-bun:
+              description: 'Enables the usage of Bun as package manager'
+              type: boolean
+              default: true
+            bun-version:
+              description: 'Bun version to install'
+              type: string
+              default: 'latest'
+        secrets:
+            ghToken:
+              required: true
 jobs:
-  build:
-    uses: shopware/github-actions/.github/workflows/build-docker-image.yml@main
-    with:
-      bun-version: '1.0.22'
-    secrets:
-      ghToken: ${{ secrets.GITHUB_TOKEN }}
+    run:
+        runs-on: ubuntu-latest
+        steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v4
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-    env:
-      SERVER_IP: '128.140.127.163'
-      COMPOSE_PROJECT_NAME: shopware
-      COMPOSE_FILE: docker-compose.prod.yml
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+        - name: Login into Github Docker Registery
+          run: echo "${{ secrets.ghToken }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Login into Github Docker Registery
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        - name: Install Shopware-CLI
+          uses: FriendsOfShopware/shopware-cli-action@v1
 
-      - name: Setup SSH Key
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        - name: Install Bun
+          uses: oven-sh/setup-bun@v2
+          if: inputs.use-bun == true
+          with:
+            bun-version: ${{ inputs.bun-version }}
 
-      - name: Scan Host
-        run: ssh-keyscan "$SERVER_IP" >> ~/.ssh/known_hosts
+        - name: Setup PHP
+          uses: shivammathur/setup-php@v2
+          with:
+            php-version: '${{ inputs.php-version }}'
+            extensions: ${{ inputs.php-extensions }}
 
-      - name: Add to Docker
-        run: |
-          docker context create server --docker "host=ssh://root@$SERVER_IP"
-          docker context use server
+        - name: Get Composer Cache Directory
+          id: composer-cache
+          run: |
+            echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
-    #  - name: Docker meta
-    #    id: meta
-    #    uses: docker/metadata-action@v4
-    #    with:
-    #      images: ghcr.io/rowmax03/shopver-example
-    #      tags: latest
+        - name: Cache Composer
+          id: composer
+          uses: actions/cache@v4
+          with:
+            path: ${{ steps.composer-cache.outputs.dir }}
+            key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: true
-          tags: "ghcr.io/rowmax03/shopver-example:latest"
+        - name: Set composer vars
+          run: |
+            echo "COMPOSER_DISABLE_NETWORK=${{ steps.composer.outputs.cache-hit && '1' || '0'  }}" >> "$GITHUB_ENV"
+            echo "COMPOSER_NO_AUDIT=1" >> "$GITHUB_ENV"
+            echo "COMPOSER_FUND=0" >> "$GITHUB_ENV"
+            echo "COMPOSER_ROOT_VERSION=1.0.0" >> "$GITHUB_ENV"
 
-      - name: Pull Image
-        run: docker pull "ghcr.io/rowmax03/shopver-example:latest"
+        - name: Build project
+          run: shopware-cli project ci .
 
-      - name: Start Services
-        run: |
-          export MYSQL_PASSWORD_ESCAPED=$(php -r 'echo rawurlencode($_SERVER["MYSQL_PASSWORD"]);')
-          docker compose up -d init
-          docker compose up -d
-        env:
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          INSTANCE_ID: ${{ secrets.INSTANCE_ID }}
-          JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
-          JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+        - name: Sanitize repo slug
+          uses: actions/github-script@v6
+          id: repo_slug
+          with:
+            result-encoding: string
+            script: return 'ghcr.io/${{ github.repository }}'.toLowerCase()
 
-      - name: Show Logs
-        if: always()
-        run: docker logs shopware-init-1
+
+        - name: Build and push
+          uses: docker/build-push-action@v6
+          with:
+            context: .
+            file: ./docker/Dockerfile
+            push: true
+            tags: ${{ steps.repo_slug.outputs.result }}:latest
