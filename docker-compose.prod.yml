@@ -1,5 +1,5 @@
 x-app: &app
-  image: ghcr.io/shyim/example-shopware-docker-project:latest
+  image: ghcr.io/rowmax03/example-shopware-docker-project:latest
   volumes:
     - files:/var/www/html/files
     - theme:/var/www/html/public/theme
