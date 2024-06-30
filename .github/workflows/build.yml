@@ -47,19 +47,22 @@ jobs:
           docker context create server --docker "host=ssh://root@$SERVER_IP"
           docker context use server
 
-      - name: Sanitize repo slug
-        id: repo_slug
-        run: echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | tee /tmp/repo_slug.txt
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: latest
 
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
           context: .
           push: true
-          tags: ${{ steps.repo_slug.outputs.result }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
     
       - name: Pull Image
-        run: docker pull $(cat /tmp/repo_slug.txt):latest
+        run: docker pull $(cat /tmp/steps.meta.outputs.tags)
 
       - name: Start Services
         run: |
