@@ -1,7 +1,7 @@
 name: Build Docker Image
 
 on:
-  workflow_dispatch:  
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -47,22 +47,22 @@ jobs:
           docker context create server --docker "host=ssh://root@$SERVER_IP"
           docker context use server
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ghcr.io/rowmax03/shopver-example
-          tags: latest
+    #  - name: Docker meta
+    #    id: meta
+    #    uses: docker/metadata-action@v4
+    #    with:
+    #      images: ghcr.io/rowmax03/shopver-example
+    #      tags: latest
 
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-    
+          tags: ghcr.io/rowmax03/shopver-example:latest
+
       - name: Pull Image
-        run: docker pull $(cat /tmp/steps.meta.outputs.tags)
+        run: docker pull ghcr.io/rowmax03/shopver-example:latest
 
       - name: Start Services
         run: |
